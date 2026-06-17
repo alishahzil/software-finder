@@ -1,15 +1,11 @@
-"use client";
-
-import { useState, useEffect, useCallback } from "react";
 import SoftwareCard from "./SoftwareCard";
-import { SoftwareItem, categories } from "@/lib/software-data";
-
-interface ApiResponse {
-  data: SoftwareItem[];
-  total: number;
-  page: number;
-  limit: number;
-}
+import { categories, querySoftware } from "@/lib/software-data";
+import {
+  KeyFeatures,
+  LinkButton,
+  SearchBox,
+  SortSelect,
+} from "./SoftwareListingControls";
 
 const PLAN_TYPES = [
   { id: "free-trial", label: "Free Trial", popular: true },
@@ -43,94 +39,37 @@ const RELATED_CATEGORIES = [
   "Nonprofit Project Management Software",
 ];
 
-function CardSkeleton() {
-  return (
-    <div className="bg-white border border-gray-200 rounded-xl p-6 animate-pulse">
-      <div className="flex items-start gap-4">
-        <div className="w-16 h-16 rounded-lg bg-gray-200 flex-shrink-0" />
-        <div className="flex-1 space-y-2">
-          <div className="h-4 bg-gray-200 rounded w-1/3" />
-          <div className="h-3 bg-gray-100 rounded w-1/2" />
-          <div className="h-3 bg-gray-100 rounded w-2/5" />
-        </div>
-        <div className="w-24 h-8 bg-gray-200 rounded flex-shrink-0" />
-      </div>
-      <div className="mt-3 space-y-2">
-        <div className="h-3 bg-gray-100 rounded w-full" />
-        <div className="h-3 bg-gray-100 rounded w-4/5" />
-      </div>
-      <div className="grid grid-cols-3 gap-2 mt-3">
-        {[1, 2, 3, 4, 5, 6].map((i) => (
-          <div key={i} className="h-3 bg-gray-100 rounded" />
-        ))}
-      </div>
-    </div>
-  );
-}
-
 const PAGE_SIZE = 12;
 
-export default function SoftwareListing() {
-  const [items, setItems] = useState<SoftwareItem[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState("All");
-  const [sort, setSort] = useState("rating");
-  const [search, setSearch] = useState("");
-  const [searchInput, setSearchInput] = useState("");
-  const [showAllFeatures, setShowAllFeatures] = useState(false);
-  const [page, setPage] = useState(1);
+interface SoftwareListingProps {
+  category?: string;
+  sort?: string;
+  search?: string;
+  page?: number;
+}
 
-  const fetchSoftware = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const params = new URLSearchParams({
-        category: selectedCategory,
-        sort,
-        search,
-        page: String(page),
-        limit: String(PAGE_SIZE),
-      });
-      const res = await fetch(`/api/software?${params.toString()}`);
-      if (!res.ok) throw new Error("Failed to fetch software data");
-      const json: ApiResponse = await res.json();
-      setItems(json.data);
-      setTotal(json.total);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedCategory, sort, search, page]);
-
-  useEffect(() => {
-    fetchSoftware();
-  }, [fetchSoftware]);
-
-  // Reset to the first page whenever filters/search/sort change
-  useEffect(() => {
-    setPage(1);
-  }, [selectedCategory, sort, search]);
+export default function SoftwareListing({
+  category = "All",
+  sort = "rating",
+  search = "",
+  page = 1,
+}: SoftwareListingProps) {
+  // Data is fetched/filtered on the server for every request (SSR).
+  const { data: items, total } = querySoftware({
+    category,
+    sort,
+    search,
+    page,
+    limit: PAGE_SIZE,
+  });
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-
-  const goToPage = (next: number) => {
-    const target = Math.min(Math.max(1, next), totalPages);
-    if (target === page) return;
-    setPage(target);
-    if (typeof window !== "undefined") {
-      document
-        .getElementById("software-listing")
-        ?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  };
+  const currentPage = Math.min(Math.max(1, page), totalPages);
 
   // Build a sliding window of up to 9 page numbers (no ellipsis)
   const WINDOW = 9;
   const windowStart = Math.min(
-    Math.max(1, page - Math.floor(WINDOW / 2)),
+    Math.max(1, currentPage - Math.floor(WINDOW / 2)),
     Math.max(1, totalPages - WINDOW + 1)
   );
   const windowEnd = Math.min(windowStart + WINDOW - 1, totalPages);
@@ -139,10 +78,8 @@ export default function SoftwareListing() {
     pageNumbers.push(p);
   }
 
-  const rangeStart = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
-  const rangeEnd = Math.min(page * PAGE_SIZE, total);
-
-  const handleSearch = () => setSearch(searchInput);
+  const rangeStart = total === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
+  const rangeEnd = Math.min(currentPage * PAGE_SIZE, total);
 
   return (
     <section id="software-listing" className="bg-white py-6">
@@ -155,34 +92,15 @@ export default function SoftwareListing() {
             {/* Filter header */}
             <div className="mb-4">
               <h2 className="text-sm font-bold text-gray-800">
-                Filter ({loading ? "…" : total.toLocaleString()}) Products:
+                Filter ({total.toLocaleString()}) Products:
               </h2>
             </div>
 
             {/* Search product */}
-            <div className="bg-gray-50 border border-gray-200 rounded-full mb-5 flex items-center px-4 py-2.5 gap-2.5">
-              <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <input
-                type="text"
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                placeholder="Search Product Name"
-                className="flex-1 text-sm text-gray-600 outline-none bg-transparent placeholder-gray-400"
-              />
-              {searchInput && (
-                <button
-                  onClick={() => { setSearchInput(""); setSearch(""); }}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              )}
-            </div>
+            <SearchBox
+              initialValue={search}
+              className="bg-gray-50 border border-gray-200 rounded-full mb-5 flex items-center px-4 py-2.5 gap-2.5"
+            />
 
             {/* Sort by */}
             <div className="mb-5">
@@ -194,21 +112,7 @@ export default function SoftwareListing() {
                   <path strokeLinecap="round" strokeWidth={2} d="M12 16.5h.01" />
                 </svg>
               </div>
-              <div className="relative">
-                <select
-                  value={sort}
-                  onChange={(e) => setSort(e.target.value)}
-                  className="w-full bg-white border border-gray-300 rounded-lg px-4 py-3 text-sm text-gray-700 outline-none cursor-pointer appearance-none"
-                >
-                  <option value="rating">Sponsored</option>
-                  <option value="rating">Top Rated</option>
-                  <option value="reviews">Most Reviewed</option>
-                  <option value="name">Name (A–Z)</option>
-                </select>
-                <svg className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </div>
+              <SortSelect value={sort} />
             </div>
 
             <hr className="border-gray-300 mb-5" />
@@ -259,31 +163,7 @@ export default function SoftwareListing() {
               <p className="text-xs text-gray-500 mb-3">
                 We have selected the most important and critical features as defined by Capterra user reviews
               </p>
-              <div className="space-y-2.5">
-                {KEY_FEATURES.slice(0, showAllFeatures ? undefined : 5).map((feat) => (
-                  <label key={feat.id} className="flex items-center gap-2 cursor-pointer group">
-                    <input
-                      type="checkbox"
-                      defaultChecked={feat.id === "all"}
-                      className="w-3.5 h-3.5 rounded border-gray-300 accent-[#0073EA]"
-                    />
-                    <span className="text-sm text-gray-700 group-hover:text-[#0073EA] transition-colors flex-1">
-                      {feat.label}
-                    </span>
-                    {feat.popular && (
-                      <span className="bg-[#0073EA] text-white text-[10px] font-bold px-1.5 py-0.5 rounded">
-                        Popular
-                      </span>
-                    )}
-                  </label>
-                ))}
-              </div>
-              <button
-                onClick={() => setShowAllFeatures(!showAllFeatures)}
-                className="text-[#0073EA] text-xs font-medium mt-2 hover:underline"
-              >
-                {showAllFeatures ? "View less" : "View more"}
-              </button>
+              <KeyFeatures features={KEY_FEATURES} />
             </div>
 
             <hr className="border-gray-300 mb-5" />
@@ -293,17 +173,17 @@ export default function SoftwareListing() {
               <h3 className="text-sm font-bold text-gray-800 mb-3">Category</h3>
               <div className="space-y-1">
                 {categories.slice(0, 6).map((cat) => (
-                  <button
+                  <LinkButton
                     key={cat}
-                    onClick={() => setSelectedCategory(cat)}
+                    params={{ category: cat === "All" ? null : cat, page: null }}
                     className={`w-full text-left text-sm px-2 py-1.5 rounded transition-colors ${
-                      selectedCategory === cat
+                      category === cat
                         ? "bg-[#EBF5FF] text-[#0073EA] font-medium"
                         : "text-gray-700 hover:bg-gray-100"
                     }`}
                   >
                     {cat}
-                  </button>
+                  </LinkButton>
                 ))}
               </div>
             </div>
@@ -361,72 +241,40 @@ export default function SoftwareListing() {
           <div className="flex-1 min-w-0">
 
             {/* Mobile search bar */}
-            <div className="lg:hidden mb-4 bg-white border border-gray-200 rounded flex items-center px-3 py-2 gap-2">
-              <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <input
-                type="text"
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                placeholder="Search Product Name"
-                className="flex-1 text-sm text-gray-700 outline-none bg-transparent"
-              />
-            </div>
+            <SearchBox
+              initialValue={search}
+              className="lg:hidden mb-4 bg-white border border-gray-200 rounded flex items-center px-3 py-2 gap-2"
+            />
 
             {/* Sort + live badge row */}
             <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
               <div className="flex items-center gap-2">
                 <span className="text-sm text-gray-600">
-                  {loading
-                    ? "Loading…"
-                    : total === 0
-                      ? "0 products"
-                      : `Showing ${rangeStart}–${rangeEnd} of ${total} products`}
+                  {total === 0
+                    ? "0 products"
+                    : `Showing ${rangeStart}–${rangeEnd} of ${total} products`}
                 </span>
-                {selectedCategory !== "All" && (
-                  <span className="text-xs bg-[#EBF5FF] text-[#0073EA] px-2 py-0.5 rounded font-medium">
-                    {selectedCategory}
-                    <button
-                      onClick={() => setSelectedCategory("All")}
+                {category !== "All" && (
+                  <span className="text-xs bg-[#EBF5FF] text-[#0073EA] px-2 py-0.5 rounded font-medium inline-flex items-center">
+                    {category}
+                    <LinkButton
+                      params={{ category: null, page: null }}
+                      ariaLabel="Clear category filter"
                       className="ml-1.5 hover:text-blue-800"
                     >
                       ×
-                    </button>
+                    </LinkButton>
                   </span>
                 )}
               </div>
               <div className="flex items-center gap-1.5 text-xs text-emerald-700 font-medium bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-full">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                Live data · updates in real time
+                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                Server-rendered · fresh on every request
               </div>
             </div>
 
-            {/* Error state */}
-            {error && (
-              <div className="text-center py-12 bg-white rounded border border-gray-200">
-                <p className="text-red-600 font-medium mb-3">{error}</p>
-                <button
-                  onClick={fetchSoftware}
-                  className="bg-[#0073EA] text-white px-5 py-2 rounded font-medium hover:bg-[#0062c4] transition-colors"
-                >
-                  Retry
-                </button>
-              </div>
-            )}
-
-            {/* Loading state */}
-            {loading && !error && (
-              <div className="space-y-4">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <CardSkeleton key={i} />
-                ))}
-              </div>
-            )}
-
             {/* Empty state */}
-            {!loading && !error && items.length === 0 && (
+            {items.length === 0 && (
               <div className="text-center py-16 text-gray-500 bg-white rounded border border-gray-200">
                 <svg className="w-12 h-12 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -437,94 +285,99 @@ export default function SoftwareListing() {
             )}
 
             {/* Listing */}
-            {!loading && !error && items.length > 0 && (
+            {items.length > 0 && (
               <div className="space-y-4">
                 {items.map((item, idx) => (
-                  <SoftwareCard key={item.id} item={item} rank={idx + 1} />
+                  <SoftwareCard key={item.id} item={item} rank={(currentPage - 1) * PAGE_SIZE + idx + 1} />
                 ))}
               </div>
             )}
 
             {/* Pagination */}
-            {!loading && !error && items.length > 0 && totalPages > 1 && (
+            {items.length > 0 && totalPages > 1 && (
               <div className="mt-8">
                 <nav
                   className="flex items-center justify-center gap-1.5 flex-wrap"
                   aria-label="Pagination"
                 >
                   {/* First page */}
-                  <button
-                    onClick={() => goToPage(1)}
-                    disabled={page === 1}
-                    aria-label="First page"
+                  <LinkButton
+                    params={{ page: "1" }}
+                    scrollToId="software-listing"
+                    disabled={currentPage === 1}
+                    ariaLabel="First page"
                     className="w-9 h-9 flex items-center justify-center rounded text-gray-500 hover:text-[#0073EA] hover:bg-gray-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-gray-500"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 5v14M19 5l-7 7 7 7" />
                     </svg>
-                  </button>
+                  </LinkButton>
 
                   {/* Prev */}
-                  <button
-                    onClick={() => goToPage(page - 1)}
-                    disabled={page === 1}
-                    aria-label="Previous page"
+                  <LinkButton
+                    params={{ page: String(currentPage - 1) }}
+                    scrollToId="software-listing"
+                    disabled={currentPage === 1}
+                    ariaLabel="Previous page"
                     className="w-9 h-9 flex items-center justify-center rounded text-gray-500 hover:text-[#0073EA] hover:bg-gray-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-gray-500"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                     </svg>
-                  </button>
+                  </LinkButton>
 
                   {/* Page numbers */}
                   {pageNumbers.map((p) => (
-                    <button
+                    <LinkButton
                       key={p}
-                      onClick={() => goToPage(p)}
-                      aria-current={p === page ? "page" : undefined}
+                      params={{ page: String(p) }}
+                      scrollToId="software-listing"
+                      ariaCurrent={p === currentPage ? "page" : undefined}
                       className={`min-w-[36px] h-9 px-2 flex items-center justify-center rounded text-sm transition-colors ${
-                        p === page
+                        p === currentPage
                           ? "border border-gray-400 text-gray-900 font-semibold"
                           : "text-gray-700 hover:text-[#0073EA] hover:bg-gray-100"
                       }`}
                     >
                       {p}
-                    </button>
+                    </LinkButton>
                   ))}
 
                   {/* Next */}
-                  <button
-                    onClick={() => goToPage(page + 1)}
-                    disabled={page === totalPages}
-                    aria-label="Next page"
+                  <LinkButton
+                    params={{ page: String(currentPage + 1) }}
+                    scrollToId="software-listing"
+                    disabled={currentPage === totalPages}
+                    ariaLabel="Next page"
                     className="w-9 h-9 flex items-center justify-center rounded text-gray-500 hover:text-[#0073EA] hover:bg-gray-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-gray-500"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                     </svg>
-                  </button>
+                  </LinkButton>
 
                   {/* Last page */}
-                  <button
-                    onClick={() => goToPage(totalPages)}
-                    disabled={page === totalPages}
-                    aria-label="Last page"
+                  <LinkButton
+                    params={{ page: String(totalPages) }}
+                    scrollToId="software-listing"
+                    disabled={currentPage === totalPages}
+                    ariaLabel="Last page"
                     className="w-9 h-9 flex items-center justify-center rounded text-gray-500 hover:text-[#0073EA] hover:bg-gray-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-gray-500"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 5v14M5 5l7 7-7 7" />
                     </svg>
-                  </button>
+                  </LinkButton>
                 </nav>
 
                 <p className="text-center text-sm italic text-gray-500 mt-3">
-                  Page {page} of {totalPages}
+                  Page {currentPage} of {totalPages}
                 </p>
               </div>
             )}
 
             {/* Top-rated software email signup */}
-            {!loading && !error && items.length > 0 && (
+            {items.length > 0 && (
               <div className="mt-8 bg-white border border-gray-100 rounded-2xl shadow-sm p-8">
                 <h3 className="text-2xl font-bold text-gray-900 mb-3">
                   Top-rated software of 2026

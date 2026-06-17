@@ -514,3 +514,63 @@ export const categories = [
   "Team Collaboration",
   "Issue Tracking",
 ];
+
+export interface SoftwareQuery {
+  category?: string;
+  sort?: string;
+  search?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface SoftwareQueryResult {
+  data: SoftwareItem[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+/**
+ * Pure data query used by BOTH the server component (direct call, SSR) and
+ * the /api/software route (HTTP). Keeping it in one place guarantees the
+ * server-rendered HTML and any client-side refetches stay in sync.
+ */
+export function querySoftware({
+  category = "All",
+  sort = "rating",
+  search = "",
+  page = 1,
+  limit = 12,
+}: SoftwareQuery = {}): SoftwareQueryResult {
+  let results: SoftwareItem[] = [...softwareData];
+
+  if (category !== "All") {
+    results = results.filter((item) => item.category === category);
+  }
+
+  if (search.trim()) {
+    const query = search.toLowerCase();
+    results = results.filter(
+      (item) =>
+        item.name.toLowerCase().includes(query) ||
+        item.description.toLowerCase().includes(query) ||
+        item.category.toLowerCase().includes(query) ||
+        item.features.some((f) => f.toLowerCase().includes(query))
+    );
+  }
+
+  if (sort === "rating") {
+    results.sort((a, b) => b.rating - a.rating);
+  } else if (sort === "reviews") {
+    results.sort((a, b) => b.reviewCount - a.reviewCount);
+  } else if (sort === "name") {
+    results.sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  const total = results.length;
+  const safePage = Math.max(1, page);
+  const start = (safePage - 1) * limit;
+  const paginated = results.slice(start, start + limit);
+
+  return { data: paginated, total, page: safePage, limit };
+}
